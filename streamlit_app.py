@@ -89,9 +89,9 @@ if st.button("Send"):
             st.session_state.messages.append({"role": "assistant", "content": ai_response})
         
         # Rerun to update the chat display
-        st.experimental_rerun()
+        st.rerun()
 
 # Clear chat button
 if st.button("Clear Chat"):
     st.session_state.messages = []
-    st.experimental_rerun()
+    st.rerun()
