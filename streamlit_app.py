@@ -68,9 +68,9 @@ def get_ai_response(messages):
 # Display chat messages
 for message in st.session_state.messages:
     if message["role"] == "user":
-        st.markdown(f'<div class="user-message">👤 {message["content"]}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="user-message">✋ {message["content"]}</div>', unsafe_allow_html=True)
     else:
-        st.markdown(f'<div class="assistant-message">🤖 {message["content"]}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="assistant-message">🎈 {message["content"]}</div>', unsafe_allow_html=True)
 
 # Chat input
 user_input = st.text_input("Type your message...", key="user_input")
