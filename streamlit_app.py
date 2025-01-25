@@ -1,97 +1,127 @@
 import streamlit as st
-import requests
+from openai import OpenAI
+import time
 import json
+import base64
 
-# Set page configuration
-st.set_page_config(page_title="AI Chat Assistant", layout="centered")
+# Initialize client with failover support
+@st.cache_resource
+def get_client():
+    return OpenAI(
+        base_url="https://api.electronhub.top/v1/",
+        api_key=st.secrets["API_KEY"]
+    )
 
-# Custom CSS for better styling
-st.markdown("""
+client = get_client()
+
+# Model router configuration
+MODEL_MAP = {
+    "default": "claude-3-haiku-20240307",
+    "complex": "gpt-4o",
+    "fallback": "gemini-1.5-flash"
+}
+
+def get_best_model(query):
+    """Automatically select model based on query"""
+    if len(query) > 1000:
+        return "gpt-3.5-turbo-16k"
+    elif any(keyword in query.lower() for keyword in ["technical", "urgent", "complex"]):
+        return MODEL_MAP["complex"]
+    return MODEL_MAP["default"]
+
+def main():
+    # App configuration
+    st.set_page_config(
+        page_title="BizBot Pro | AI Customer Support",
+        page_icon="🤖",
+        layout="centered",
+        initial_sidebar_state="expanded"
+    )
+    
+    # Custom styling
+    st.markdown("""
     <style>
-    .stTextInput>div>div>input {
-        border-radius: 10px;
-    }
-    .css-1d391kg {
-        padding: 1rem;
-        border-radius: 10px;
-        margin-bottom: 0.5rem;
-    }
-    .user-message {
-        background-color: #2196F3;
-        color: white;
-        padding: 1rem;
-        border-radius: 10px;
-        margin: 0.5rem 0;
-    }
-    .assistant-message {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 10px;
-        margin: 0.5rem 0;
-    }
+        [data-testid="stHeader"] {background: #1a237e;}
+        .stChatInput {border-radius: 20px;}
+        .stButton>button {background: #4CAF50!important; color: white!important;}
     </style>
-""", unsafe_allow_html=True)
-
-# Initialize session state for messages if it doesn't exist
-if 'messages' not in st.session_state:
-    st.session_state.messages = []
-
-# App title
-st.title("AI Chat Assistant")
-
-# API Configuration
-API_KEY = st.secrets["API_KEY"]  # Store your API key in Streamlit secrets
-API_URL = "https://api.nexusmind.tech/v1/chat/completions"
-
-def get_ai_response(messages):
-    headers = {
-        "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json"
-    }
+    """, unsafe_allow_html=True)
     
-    data = {
-        "messages": [
-            {"role": "system", "content": "You are a helpful AI assistant."}
-        ] + messages,
-        "model": "gpt-4o",
-        "stream": False
-    }
+    # Session state initialization
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    if "usage" not in st.session_state:
+        st.session_state.usage = {"tokens": 0, "conversations": 0}
     
-    try:
-        response = requests.post(API_URL, headers=headers, json=data)
-        response.raise_for_status()  # Raise an exception for bad status codes
-        return response.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        st.error(f"Error: {str(e)}")
-        return None
-
-# Display chat messages
-for message in st.session_state.messages:
-    if message["role"] == "user":
-        st.markdown(f'<div class="user-message">✋ {message["content"]}</div>', unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div class="assistant-message">🎈 {message["content"]}</div>', unsafe_allow_html=True)
-
-# Chat input
-user_input = st.text_input("Type your message...", key="user_input")
-
-if st.button("Send"):
-    if user_input:
-        # Add user message to chat
-        st.session_state.messages.append({"role": "user", "content": user_input})
+    # Sidebar - Business Configuration
+    with st.sidebar:
+        st.image("https://i.imgur.com/xyz/logo.png", width=150)  # Default logo
+        st.header("Business Setup")
         
-        # Get AI response
-        with st.spinner("AI is thinking..."):
-            ai_response = get_ai_response(st.session_state.messages)
+        # Brand customization
+        business_name = st.text_input("Business Name", "My Business")
+        brand_color = st.color_picker("Brand Color", "#4B89DC")
+        logo = st.file_uploader("Upload Logo (PNG)", type=["png"])
+        
+        # Model selection
+        st.divider()
+        with st.expander("⚙️ Advanced Settings"):
+            model_choice = st.radio("AI Model Priority", 
+                ["Cost-Effective", "Balanced", "High Accuracy"])
             
-        if ai_response:
-            # Add AI response to chat
-            st.session_state.messages.append({"role": "assistant", "content": ai_response})
-        
-        # Rerun to update the chat display
-        st.rerun()
+        # Analytics
+        st.divider()
+        st.subheader("Analytics")
+        col1, col2 = st.columns(2)
+        col1.metric("Total Chats", st.session_state.usage["conversations"])
+        col2.metric("Tokens Used", f"{st.session_state.usage['tokens']:,}")
+    
+    # Main chat interface
+    st.header(f"💬 {business_name} Support")
+    
+    # Chat messages display
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    
+    # Chat input and processing
+    if prompt := st.chat_input("How can I help you today?"):
+        try:
+            # Add user message
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            st.session_state.usage["conversations"] += 1
+            
+            # Get model based on query
+            selected_model = get_best_model(prompt)
+            
+            # Generate response
+            with st.chat_message("assistant"):
+                response = client.chat.completions.create(
+                    model=selected_model,
+                    messages=[{"role": "system", "content": f"You are {business_name}'s support assistant. Current time: {time.strftime('%Y-%m-%d %H:%M')}"}] 
+                              + st.session_state.messages,
+                    stream=True,
+                )
+                
+                full_response = ""
+                container = st.empty()
+                for chunk in response:
+                    if chunk.choices[0].delta.content:
+                        full_response += chunk.choices[0].delta.content
+                        container.markdown(full_response + "▌")
+                
+                container.markdown(full_response)
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                st.session_state.usage["tokens"] += response.usage.total_tokens
+                
+        except Exception as e:
+            # Fallback to Gemini-1.5-Flash
+            st.error("⚠️ Primary model failed - using backup")
+            response = client.chat.completions.create(
+                model=MODEL_MAP["fallback"],
+                messages=st.session_state.messages
+            )
+            st.session_state.messages.append({"role": "assistant", "content": response.choices[0].message.content})
 
-# Clear chat button
-if st.button("Clear Chat"):
-    st.session_state.messages = []
-    st.rerun()
+if __name__ == "__main__":
+    main()
