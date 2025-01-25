@@ -3,6 +3,22 @@ from openai import OpenAI
 import time
 import json
 
+# Test connection before anything else
+try:
+    client = OpenAI(
+        base_url="https://api.electronhub.top/v1/",
+        api_key=st.secrets["API_KEY"]
+    )
+    test_response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": "Test connection"}]
+    )
+    st.success("✅ API Connection Successful!")
+except Exception as e:
+    st.error(f"❌ Connection Failed: {str(e)}")
+    st.stop()  # Prevent rest of app from running
+
+
 # Set page config FIRST
 st.set_page_config(
     page_title="BizBot Pro | AI Customer Support",
